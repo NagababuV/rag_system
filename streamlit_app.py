@@ -5,6 +5,7 @@ from app import ask_question
 from loader import load_pdfs
 from splitter import split_text
 from vector_store import create_or_load_vector_db
+from qa_chain import generate_document_questions
 from config import VECTOR_DB_DIRECTORY
 
 # ---------------- PAGE CONFIG ----------------
@@ -19,20 +20,10 @@ st.title("📄 Document Assistant")
 
 st.markdown(
     """
-    ### Welcome 👋  
-    This tool helps you **find accurate answers from your documents**.
+    Upload large documents such as **company policies or insurance policies**
+    (even 50–100+ pages) and ask questions to get accurate answers instantly.
 
-    **What you can do:**
-    - Upload one or more PDF documents
-    - Ask questions related to those documents
-    - Get answers strictly based on the uploaded content
-
-    **Ideal for large documents (50–100+ pages):**
-    - Company or HR policies
-    - Insurance policy documents
-    - Legal or compliance documents
-
-    ⚠️ If an answer is not found in the documents, the assistant will clearly say so.
+    Answers are provided **strictly from the uploaded documents**.
     """
 )
 
@@ -47,6 +38,7 @@ uploaded_files = st.file_uploader(
 )
 
 documents_ready = False
+suggested_questions = []
 
 if uploaded_files:
     os.makedirs("data/pdfs", exist_ok=True)
@@ -57,41 +49,29 @@ if uploaded_files:
 
     st.success("✅ Documents uploaded successfully")
 
-    with st.spinner("Processing documents, please wait..."):
+    with st.spinner("Processing documents..."):
         texts = load_pdfs("data/pdfs")
         chunks = split_text(texts)
         vector_db = create_or_load_vector_db(chunks, VECTOR_DB_DIRECTORY)
 
+        combined_text = "\n\n".join(texts)
+        suggested_questions = generate_document_questions(combined_text)
+
     documents_ready = True
     st.success("📘 Documents are ready for questions")
 
-# ---------------- SUGGESTED QUESTIONS ----------------
-if documents_ready:
+# ---------------- DYNAMIC QUESTIONS ----------------
+if documents_ready and suggested_questions:
     st.markdown("---")
-    st.subheader("💡 Suggested Questions Based on Your Documents")
+    st.subheader("💡 Suggested Questions From Your Document")
 
-    st.markdown(
-        """
-        Below are some **important questions commonly found in policy and insurance documents**.  
-        You can **copy any question and paste it into the Ask box**.
-        """
+    st.info(
+        "These questions are automatically generated from the uploaded document. "
+        "You can copy any question and paste it below."
     )
 
-    suggested_questions = [
-        "What is the refund or cancellation policy?",
-        "How many sick leaves are allowed per year?",
-        "Is remote work permitted?",
-        "What is the notice period for termination?",
-        "What benefits are provided to employees?",
-        "What does the insurance policy cover?",
-        "Is there any waiting period mentioned in the policy?",
-        "Are there any exclusions mentioned in the document?",
-        "How long does it take to process a refund or claim?",
-        "What are the key terms and conditions?"
-    ]
-
     for q in suggested_questions:
-        st.code(q, language="text")  # built-in copy button
+        st.code(q, language="text")
 
 # ---------------- ASK QUESTION ----------------
 st.markdown("---")
@@ -104,7 +84,7 @@ query = st.text_input(
 
 if st.button("Ask"):
     if not query.strip():
-        st.warning("⚠️ Please enter a valid question.")
+        st.warning("Please enter a valid question.")
     else:
         with st.spinner("Searching documents..."):
             answer = ask_question(query)
